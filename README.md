@@ -122,6 +122,8 @@ Use **Web app Node.js**, com o frontend e backend juntos. A [documentação ofic
 
 Os rótulos do painel podem variar. A integração GitHub pode disparar novo deploy a cada push; confira a configuração no hPanel. Todo deploy/reinício cria uma nova execução, portanto esvazia salas e mensagens. Faça atualizações entre aulas.
 
+O carregador da Hostinger inicia `server.js` com `require()`. A inicialização assíncrona fica dentro de uma função para permitir esse carregamento no Node.js 24. Não use `await` no nível principal do arquivo de entrada ou de suas dependências: isso causa `ERR_REQUIRE_ASYNC_MODULE` e resposta 503 mesmo quando a compilação termina com sucesso. `npm test` verifica a inicialização via CLI e via `require()`, incluindo frontend e `/api/health`.
+
 ## Variáveis de ambiente
 
 Todas estão em `.env.example`. Tempos são em milissegundos; limites de arquivo em bytes.
