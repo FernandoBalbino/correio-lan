@@ -15,7 +15,8 @@ export class MessageService {
     const copy = message.copies.get(user.id);
     // CCO nunca é serializado: nem para destinatários, remetente, listagens ou sincronização.
     return {
-      id: message.id, from: message.from, fromName: message.fromName, to: message.to, cc: message.cc,
+      id: message.id, threadId: message.threadId ?? message.id, inReplyTo: message.inReplyTo ?? null,
+      from: message.from, fromName: message.fromName, to: message.to, cc: message.cc,
       subject: message.subject, preview: message.body.replace(/\s+/g, ' ').slice(0, 140),
       ...(full ? { body: message.body } : {}), timestamp: message.timestamp,
       attachments: message.attachments.map(({ id, name, mime, size }) => ({ id, name, mime, size })),
@@ -54,10 +55,14 @@ export class MessageService {
     const subject = text(input.subject, 'Assunto', 100);
     const body = text(input.body ?? '', 'Mensagem', this.config.maxMessageLength, { required: false, multiline: true });
     const recipients = this.validateRecipients(user, input);
+    if (input.inReplyTo !== undefined && input.inReplyTo !== null) {
+      if (typeof input.inReplyTo !== 'string' || !/^[a-f0-9-]{36}$/i.test(input.inReplyTo)) throw new AppError(400, 'INVALID_REPLY', 'Referência de resposta inválida.');
+      this.get(user, input.inReplyTo);
+    }
     const forwarded = input.forwardedAttachmentIds ?? [];
     if (!Array.isArray(forwarded) || forwarded.length + files.length > this.config.maxAttachments) throw new AppError(413, 'ATTACHMENT_LIMIT', 'Quantidade de anexos acima do limite.');
     if (key && !/^[A-Za-z0-9_-]{16,80}$/.test(key)) throw new AppError(400, 'INVALID_IDEMPOTENCY_KEY', 'Identificador de envio inválido.');
-    const fingerprint = createHash('sha256').update(JSON.stringify({ subject, body, recipients, forwarded, source: input.forwardMessageId,
+    const fingerprint = createHash('sha256').update(JSON.stringify({ subject, body, recipients, forwarded, source: input.forwardMessageId, inReplyTo: input.inReplyTo ?? null,
       files: files.map(file => [file.originalname, createHash('sha256').update(file.buffer).digest('hex')]) })).digest('hex');
     if (key && user.idempotency.has(key)) {
       const previous = user.idempotency.get(key);
@@ -91,8 +96,11 @@ export class MessageService {
       this.validateRecipients(user, data);
       const room = this.store.rooms.get(user.room);
       if (room.messages.size >= this.config.maxMessagesPerRoom) throw new AppError(429, 'MESSAGE_LIMIT', 'A sala atingiu o limite de mensagens temporárias.');
+      const parent = input.inReplyTo ? this.get(user, input.inReplyTo) : null;
+      const id = randomUUID();
       const message = {
-        id: randomUUID(), from: user.email, fromName: user.name, ...data, timestamp: this.store.now(),
+        id, threadId: parent ? parent.threadId ?? parent.id : id, inReplyTo: parent?.id ?? null,
+        from: user.email, fromName: user.name, ...data, timestamp: this.store.now(),
         attachments: [...existingAttachments, ...saved], copies: new Map(),
       };
       const addCopy = (participant, inbox, bcc = false) => {
@@ -146,6 +154,71 @@ export class MessageService {
     if (folder === 'starred') return copy.starred;
     return copy.inbox && copy.location === folder;
   }
+  conversationGroups(user) {
+    const groups = new Map();
+    const room = this.store.rooms.get(user.room);
+    // Agrupar somente cópias da sessão: pertencer à conversa não concede acesso ao histórico.
+    for (const id of user.mailbox.keys()) {
+      const message = room.messages.get(id);
+      if (!message?.copies.has(user.id)) continue;
+      const threadId = message.threadId ?? message.id;
+      if (!groups.has(threadId)) groups.set(threadId, []);
+      groups.get(threadId).push(message);
+    }
+    return groups;
+  }
+  conversationMessages(user, id) {
+    const message = this.get(user, id);
+    return this.conversationGroups(user).get(message.threadId ?? message.id);
+  }
+  conversation(user, id) {
+    const messages = this.conversationMessages(user, id);
+    return {
+      id: messages[0].threadId ?? messages[0].id, subject: messages[0].subject.replace(/^(?:re:\s*)+/i, ''),
+      messages: messages.map(message => this.projection(user, message, true)),
+    };
+  }
+  updateConversation(user, id, patch) {
+    for (const message of this.conversationMessages(user, id)) this.update(user, message.id, patch);
+    return this.conversation(user, id);
+  }
+  removeConversation(user, id) {
+    const messages = this.conversationMessages(user, id);
+    if (messages.some(message => !message.copies.get(user.id).trash)) throw new AppError(409, 'TRASH_REQUIRED', 'Mova a conversa para a lixeira antes de excluir definitivamente.');
+    for (const message of messages) this.remove(user, message.id);
+    return { deleted: true, ids: messages.map(message => message.id) };
+  }
+  conversationTotals(user, groups = this.conversationGroups(user)) {
+    const totals = { inbox: 0, sent: 0, trash: 0, starred: 0, archive: 0, spam: 0, snoozed: 0, unread: 0 };
+    for (const messages of groups.values()) {
+      const copies = messages.map(message => message.copies.get(user.id));
+      for (const folder of Object.keys(totals).filter(item => item !== 'unread')) if (copies.some(copy => this.matches(copy, folder))) totals[folder]++;
+      if (copies.some(copy => this.matches(copy, 'inbox') && !copy.read)) totals.unread++;
+    }
+    return totals;
+  }
+  conversationList(user, folder, query = {}) {
+    const offset = integer(query.offset, 0, this.config.maxMessagesPerRoom);
+    const limit = integer(query.limit, 50, 50);
+    if (!limit) throw new AppError(400, 'INVALID_LIMIT', 'O limite deve ser maior que zero.');
+    const search = query.q === undefined ? '' : text(query.q, 'Busca', 100, { required: false }).toLocaleLowerCase('pt-BR');
+    const groups = this.conversationGroups(user);
+    const all = [...groups.values()].reverse().filter(messages => messages.some(message => this.matches(message.copies.get(user.id), folder))
+      && (!search || messages.some(message => [message.subject, message.body, message.fromName, message.from, ...message.to, ...message.cc].some(value => value.toLocaleLowerCase('pt-BR').includes(search)))))
+      .map(messages => {
+        const latest = messages.at(-1);
+        const matching = messages.filter(message => this.matches(message.copies.get(user.id), folder));
+        const copies = matching.map(message => message.copies.get(user.id));
+        return {
+          ...this.projection(user, latest), subject: messages[0].subject.replace(/^(?:re:\s*)+/i, ''),
+          threadCount: messages.length, read: copies.every(copy => copy.read), starred: copies.some(copy => copy.starred),
+          hasAttachments: messages.some(message => message.attachments.length > 0),
+          participants: [...new Set(messages.map(message => message.fromName))],
+        };
+      }).sort((a, b) => b.timestamp - a.timestamp);
+    return { messages: all.slice(offset, offset + limit), total: all.length, offset, limit,
+      hasMore: offset + limit < all.length, cursor: user.revision, totals: this.conversationTotals(user, groups) };
+  }
   totals(user) {
     const totals = { inbox: 0, sent: 0, trash: 0, starred: 0, archive: 0, spam: 0, snoozed: 0, unread: 0 };
     for (const copy of user.mailbox.values()) {
@@ -155,6 +228,7 @@ export class MessageService {
     return totals;
   }
   list(user, folder, query = {}) {
+    if (query.view === 'threads') return this.conversationList(user, folder, query);
     const offset = integer(query.offset, 0, this.config.maxMessagesPerRoom);
     const limit = integer(query.limit, 50, 50);
     if (!limit) throw new AppError(400, 'INVALID_LIMIT', 'O limite deve ser maior que zero.');

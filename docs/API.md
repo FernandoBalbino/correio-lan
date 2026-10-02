@@ -22,6 +22,9 @@ Base `/api`, no mesmo domínio da interface. Exceto entrada e health, envie `Aut
 | GET | `/api/messages/sync?cursor=N` | Alterações incrementais da própria caixa |
 | POST | `/api/messages` | Enviar aos destinatários da sala |
 | GET | `/api/messages/:id` | Corpo completo da mensagem acessível |
+| GET | `/api/messages/:id/thread` | Histórico da conversa; apenas mensagens acessíveis à sessão |
+| PATCH | `/api/messages/:id/thread/:action` | Aplicar read, star, trash, restore ou location às próprias cópias da conversa |
+| DELETE | `/api/messages/:id/thread` | Excluir próprias cópias da conversa, todas previamente na lixeira |
 | GET | `/api/messages/:id/attachments/:attachmentId` | Download autenticado de anexo acessível |
 | PATCH | `/api/messages/:id/read` | Estado individual de leitura |
 | PATCH | `/api/messages/:id/star` | Estado individual de estrela |
@@ -65,9 +68,13 @@ Opcionalmente envie cabeçalho `Idempotency-Key` com 16–80 caracteres (`A-Z`, 
 
 O remetente e horário vêm do servidor. O campo `bcc` **só existe na entrada do envio e no estado interno**; nenhuma projeção JSON o devolve. `receivedAsBcc` é apenas um booleano da própria cópia. Corpo e nomes são tratados como texto, sem HTML executável na interface.
 
+Respostas enviam `inReplyTo` com o ID da mensagem respondida. O servidor exige acesso a essa mensagem e deriva `threadId` da conversa; não aceita um ID de conversa fornecido pelo cliente para conceder acesso. Assuntos iguais, sem `inReplyTo`, continuam sendo mensagens independentes. Encaminhamentos iniciam outra conversa. O histórico nunca inclui mensagens que a sessão não enviou ou recebeu, mesmo para destinatários adicionados posteriormente.
+
 ## Listagens e sincronização
 
 Listagens aceitam `offset` (padrão 0), `limit` (1–50, padrão 50) e `q` (busca de até 100 caracteres). Retornam `messages`, `total`, `offset`, `limit`, `hasMore`, `cursor` e `totals`. O corpo completo está somente em `GET /messages/:id`. Estrela/leitura/lixeira/pasta são individuais.
+
+Com `view=threads`, listagens paginam conversas e retornam uma linha por conversa, com `threadCount`, participantes remetentes visíveis, assunto original, prévia mais recente e totais por conversa. A busca consulta apenas mensagens acessíveis. `GET /messages/:id/thread` retorna `id`, `subject` e `messages` em ordem cronológica, com os corpos completos e metadados autorizados de cada mensagem. `view=threads` também faz a sincronização retornar totais por conversa; os eventos continuam sendo por mensagem.
 
 `GET /messages/sync?cursor=N` retorna `cursor`, `reset`, alterações e totais. Cada evento identifica criação/atualização/exclusão e sua mensagem segura; exclusões usam mensagem nula. O cursor é crescente por usuário. Quando o cursor é antigo demais, `reset: true` exige recarregar a listagem; não tente inferir mensagens ausentes.
 

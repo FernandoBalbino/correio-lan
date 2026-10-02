@@ -2,7 +2,7 @@ export function parseRecipients(value) { return [...new Set(value.split(/[;,\n]/
 export function replyMessage(message, currentEmail, all = false) {
   const to = [...new Set(message.from === currentEmail ? message.to : [message.from, ...(all ? message.to : [])])].filter(email => email !== currentEmail);
   const cc = all ? [...new Set(message.cc)].filter(email => email !== currentEmail && !to.includes(email)) : [];
-  return { to, cc, bcc: [], subject: `Re: ${message.subject.replace(/^(?:re:\s*)+/i, '')}`, body: '' };
+  return { to, cc, bcc: [], subject: `Re: ${message.subject.replace(/^(?:re:\s*)+/i, '')}`, body: '', inReplyTo: message.id };
 }
 export function forwardMessage(message) {
   return {

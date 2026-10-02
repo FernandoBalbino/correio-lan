@@ -124,6 +124,8 @@ Os rótulos do painel podem variar. A integração GitHub pode disparar novo dep
 
 O carregador da Hostinger inicia `server.js` com `require()`. A inicialização assíncrona fica dentro de uma função para permitir esse carregamento no Node.js 24. Não use `await` no nível principal do arquivo de entrada ou de suas dependências: isso causa `ERR_REQUIRE_ASYNC_MODULE` e resposta 503 mesmo quando a compilação termina com sucesso. `npm test` verifica a inicialização via CLI e via `require()`, incluindo frontend e `/api/health`.
 
+As respostas ficam agrupadas em conversas na caixa de entrada e em Enviados. Abra uma conversa para ler a mensagem original e as respostas em ordem, recolher/expandir cada mensagem e responder a qualquer uma delas. Novas respostas atualizam a conversa aberta por polling. O histórico respeita o acesso individual e o CCO; participantes incluídos depois veem apenas as mensagens recebidas ou enviadas por sua sessão.
+
 ## Variáveis de ambiente
 
 Todas estão em `.env.example`. Tempos são em milissegundos; limites de arquivo em bytes.

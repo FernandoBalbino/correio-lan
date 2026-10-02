@@ -6,7 +6,8 @@ import { el, icon, toast, emptyState, dateTime, shortTime } from './mail-ui.js';
 const $ = selector => document.querySelector(selector);
 const titles = { inbox: 'Caixa de entrada', sent: 'Enviados', drafts: 'Rascunhos', trash: 'Lixeira', starred: 'Com estrela', archive: 'Arquivados', spam: 'Spam', snoozed: 'Adiados' };
 const state = { user: null, config: null, folder: 'inbox', rows: new Map(), selected: new Set(), offset: 0,
-  total: 0, query: '', cursor: null, message: null, people: [], directory: [], activity: null, teacherStatus: null,
+  total: 0, query: '', cursor: null, message: null, thread: null, collapsed: new Set(), readerVersion: 0,
+  people: [], directory: [], activity: null, teacherStatus: null,
   totals: {}, draft: null, files: [], missingFiles: [], forwarded: [], dialogMode: null, loadVersion: 0,
   failures: new Set(), expired: false, sound: sessionStorage.getItem('correio-lan:sound') === 'true' };
 let drafts;
@@ -60,34 +61,31 @@ async function refreshPeople(signal) {
   displayPeople();
   if (state.dialogMode === 'people' && $('#utility-dialog').open) displayPeople($('#dialog-content'));
 }
-function isInFolder(message, folder) {
-  if (folder === 'trash') return message.trash;
-  if (message.trash) return false;
-  if (folder === 'sent') return message.sent;
-  if (folder === 'starred') return message.starred;
-  return message.inbox && message.location === folder;
-}
 function rowNode(message, draft = false) {
   const row = el('div', `mail-row${!message.read && !draft ? ' unread' : ''}${message.starred ? ' starred' : ''}`);
+  const selectionId = message.threadId ?? message.id;
   row.dataset.messageId = message.id;
   const check = document.createElement('input'); check.type = 'checkbox';
-  check.setAttribute('aria-label', `Selecionar ${message.subject || 'rascunho'}`); check.checked = state.selected.has(message.id);
-  check.addEventListener('change', () => { if (check.checked) state.selected.add(message.id); else state.selected.delete(message.id); updateSelection(); });
+  check.setAttribute('aria-label', `Selecionar ${message.subject || 'rascunho'}`); check.checked = state.selected.has(selectionId);
+  check.addEventListener('change', () => { if (check.checked) state.selected.add(selectionId); else state.selected.delete(selectionId); updateSelection(); });
   row.append(check);
   if (!draft) {
     const star = el('button', 'icon-button row-star'); star.append(icon('imgEmailRowStar.svg'));
     star.setAttribute('aria-label', message.starred ? 'Remover estrela' : 'Adicionar estrela'); star.setAttribute('aria-pressed', String(message.starred));
-    star.addEventListener('click', () => perform(() => mutate(message.id, 'star', { starred: !message.starred })));
+    star.addEventListener('click', () => perform(() => mutate(message.id, 'star', { starred: !message.starred }, true)));
     row.append(star);
   }
   const button = el('button', 'mail-row-main');
-  button.append(el('span', 'row-sender', draft ? 'Rascunho' : state.folder === 'sent' ? `Para: ${message.to.join(', ') || 'destinatário oculto'}` : message.fromName));
+  const sender = el('span', 'row-sender', draft ? 'Rascunho' : message.threadCount > 1 ? message.participants.join(', ')
+    : state.folder === 'sent' ? `Para: ${message.to.join(', ') || 'destinatário oculto'}` : message.fromName);
+  if (message.threadCount > 1) sender.append(el('span', 'thread-count', ` (${message.threadCount})`));
+  button.append(sender);
   const content = el('span', 'row-content');
   content.append(el('span', 'row-subject', message.subject || '(Sem assunto)'), el('span', 'row-preview', ` — ${message.preview || message.body || ''}`));
   button.append(content);
   button.addEventListener('click', () => draft ? openCompose(message) : perform(() => openMessage(message.id)));
   row.append(button);
-  if ((message.attachments?.length || message.savedFileNames?.length) > 0) { const attachment = el('span', 'row-attachment', '📎'); attachment.setAttribute('aria-label', 'Com anexos'); row.append(attachment); }
+  if (message.hasAttachments || (message.attachments?.length || message.savedFileNames?.length) > 0) { const attachment = el('span', 'row-attachment', '📎'); attachment.setAttribute('aria-label', 'Com anexos'); row.append(attachment); }
   const time = el('time', 'row-time', shortTime(message.timestamp || message.updatedAt));
   time.dateTime = new Date(message.timestamp || message.updatedAt).toISOString(); row.append(time);
   return row;
@@ -95,7 +93,7 @@ function rowNode(message, draft = false) {
 function renderList() {
   const container = $('#message-list');
   const rows = state.folder === 'drafts' ? drafts.list().filter(draft => !state.query || `${draft.subject} ${draft.body}`.toLowerCase().includes(state.query.toLowerCase()))
-    : [...state.rows.values()].filter(message => isInFolder(message, state.folder));
+    : [...state.rows.values()];
   if (state.folder !== 'drafts') rows.sort((a, b) => b.timestamp - a.timestamp);
   if (!rows.length) {
     const title = state.query ? 'Nenhuma mensagem encontrada.' : state.folder === 'inbox' ? 'Nenhuma mensagem recebida.'
@@ -105,7 +103,7 @@ function renderList() {
   $('#folder-title').textContent = titles[state.folder];
   $('#list-caption').textContent = state.query ? `Resultados para “${state.query}”` : 'Sua turma, a uma mensagem de distância.';
   const total = state.folder === 'drafts' ? rows.length : state.total;
-  $('#pagination-label').textContent = total ? `${state.offset + 1}–${Math.min(state.offset + rows.length, total)} de ${total}` : '0 mensagens';
+  $('#pagination-label').textContent = total ? `${state.offset + 1}–${Math.min(state.offset + rows.length, total)} de ${total}` : state.folder === 'drafts' ? '0 rascunhos' : '0 conversas';
   $('#previous-page').disabled = state.offset === 0 || state.folder === 'drafts';
   $('#next-page').disabled = state.offset + 50 >= total || state.folder === 'drafts';
   updateSelection(); updateCounts();
@@ -118,18 +116,19 @@ async function loadFolder({ reset = false } = {}) {
   const version = ++state.loadVersion;
   if (reset) { state.offset = 0; state.selected.clear(); }
   if (state.folder === 'drafts') { state.rows = new Map(drafts.list().map(item => [item.id, item])); renderList(); return; }
-  const params = new URLSearchParams({ offset: String(state.offset), limit: '50' });
+  const params = new URLSearchParams({ offset: String(state.offset), limit: '50', view: 'threads' });
   if (state.query) params.set('q', state.query);
   const data = await api(`/messages/${state.folder}?${params}`);
   if (version !== state.loadVersion) return;
-  state.rows = new Map(data.messages.map(message => [message.id, message]));
+  state.rows = new Map(data.messages.map(message => [message.threadId, message]));
+  state.selected = new Set([...state.selected].filter(id => state.rows.has(id)));
   state.total = data.total; state.totals = data.totals;
   if (state.cursor === null) state.cursor = data.cursor;
   renderList();
 }
 function showList() {
   $('#reader').hidden = true; $('#mail-list-view').hidden = false;
-  state.message = null; document.body.classList.remove('reading-expanded');
+  state.message = null; state.thread = null; state.readerVersion++; document.body.classList.remove('reading-expanded');
   $('#folder-title').focus?.();
 }
 async function changeFolder(folder) {
@@ -144,7 +143,7 @@ async function changeFolder(folder) {
 }
 async function syncMessages(signal) {
   if (state.cursor === null) return;
-  const data = await api(`/messages/sync?cursor=${state.cursor}`, { signal });
+  const data = await api(`/messages/sync?cursor=${state.cursor}&view=threads`, { signal });
   state.totals = data.totals;
   const notified = new Set();
   for (const event of data.events) {
@@ -152,47 +151,84 @@ async function syncMessages(signal) {
     if (event.kind === 'created' && message?.inbox && !notified.has(message.id)) {
       notified.add(message.id); toast('Nova mensagem', `${message.fromName} · ${message.subject}`); playSound();
     }
-    if (!message || !isInFolder(message, state.folder)) state.rows.delete(event.messageId);
-    else if (state.rows.has(message.id) || (state.offset === 0 && !state.query)) state.rows.set(message.id, message);
-    if (state.message?.id === event.messageId) {
-      if (!message) showList();
-      else { state.message = { ...state.message, ...message }; renderMessage(); }
-    }
   }
-  if (data.reset || (data.events.length && (state.offset !== 0 || state.query))) await loadFolder();
-  else if (data.events.length) {
-    state.total = state.totals[state.folder] ?? state.total;
-    if (state.rows.size > 50) state.rows = new Map([...state.rows.values()].sort((a, b) => b.timestamp - a.timestamp).slice(0, 50).map(item => [item.id, item]));
-    renderList();
+  if (state.thread && (data.reset || data.events.some(event => event.message?.threadId === state.thread.id || state.thread.messages.some(message => message.id === event.messageId)))) {
+    const deleted = new Set(data.events.filter(event => !event.message).map(event => event.messageId));
+    const anchor = data.events.findLast(event => event.message?.threadId === state.thread.id)?.message.id
+      ?? state.thread.messages.filter(message => !deleted.has(message.id)).at(-1)?.id;
+    if (anchor) await refreshConversation(anchor, signal); else showList();
   }
+  if (data.reset || data.events.length) await loadFolder();
   // Avança apenas após aplicar os eventos/refazer a página; uma falha permite tentar novamente.
   state.cursor = data.cursor; updateCounts();
 }
 async function openMessage(id) {
-  const data = await api(`/messages/${encodeURIComponent(id)}`);
-  state.message = data;
-  if (!data.read && data.inbox) state.message = await api(`/messages/${data.id}/read`, { method: 'PATCH', body: { read: true } });
-  if (state.rows.has(id)) state.rows.set(id, state.message);
-  renderList(); renderMessage(); $('#mail-list-view').hidden = true; $('#reader').hidden = false;
+  const version = ++state.readerVersion;
+  let data = await api(`/messages/${encodeURIComponent(id)}/thread`);
+  if (version !== state.readerVersion) return;
+  if (data.messages.some(message => !message.read && message.inbox && !message.trash)) data = await api(`/messages/${id}/thread/read`, { method: 'PATCH', body: { read: true } });
+  if (version !== state.readerVersion) return;
+  if (state.thread?.id !== data.id) state.collapsed.clear();
+  setConversation(data); await loadFolder();
+  if (version !== state.readerVersion) return;
+  renderMessage(); $('#mail-list-view').hidden = true; $('#reader').hidden = false;
   $('#reader-subject').tabIndex = -1; $('#reader-subject').focus(); polling?.trigger('messages');
 }
+function setConversation(data) { state.thread = data; state.message = data.messages.at(-1); }
+async function refreshConversation(id, signal) {
+  const version = state.readerVersion;
+  try {
+    let data = await api(`/messages/${id}/thread`, { signal });
+    if (version !== state.readerVersion || !state.thread) return;
+    if (data.messages.some(message => message.inbox && !message.trash && !message.read)) data = await api(`/messages/${id}/thread/read`, { method: 'PATCH', body: { read: true }, signal });
+    if (version !== state.readerVersion || !state.thread) return;
+    setConversation(data); renderMessage();
+  } catch (error) { if (error.status === 404 && version === state.readerVersion) showList(); else throw error; }
+}
 function renderMessage() {
-  const message = state.message;
-  if (!message) return;
-  $('#reader-subject').textContent = message.subject;
-  $('#reader-name').textContent = message.fromName;
-  $('#reader-email').textContent = `<${message.from}>`;
-  $('#reader-to-short').textContent = message.to.includes(state.user.email) ? 'mim' : message.to.join(', ') || 'destinatário oculto';
-  $('#reader-date').textContent = dateTime(message.timestamp); $('#reader-date').dateTime = new Date(message.timestamp).toISOString();
-  $('#reader-body').textContent = message.body;
-  $('#reader-folder').textContent = message.trash ? 'Lixeira' : message.sent && !message.inbox ? 'Enviados' : 'Entrada';
-  $('#bcc-notice').hidden = !message.receivedAsBcc;
-  $('#restore-button').hidden = !message.trash; $('#delete-button').hidden = !message.trash;
-  $('#reader-star').setAttribute('aria-pressed', String(message.starred)); $('#reader-star').classList.toggle('starred', message.starred);
-  const details = [];
-  for (const [label, value] of [['De', `${message.fromName} <${message.from}>`], ['Para', message.to.join(', ') || '—'], ['Cc', message.cc.join(', ') || '—'], ['Data', dateTime(message.timestamp)]]) details.push(el('dt', '', label), el('dd', '', value));
-  $('#reader-addresses').replaceChildren(...details);
-  $('#reader-attachments').replaceChildren(...message.attachments.map(file => {
+  if (!state.thread) return;
+  $('#reader-subject').textContent = state.thread.subject;
+  $('#reader-count').textContent = `${state.thread.messages.length} ${state.thread.messages.length === 1 ? 'mensagem' : 'mensagens'}`;
+  $('#reader-folder').textContent = titles[state.folder];
+  $('#restore-button').hidden = !state.thread.messages.some(message => message.trash);
+  $('#delete-button').hidden = !state.thread.messages.every(message => message.trash);
+  $('#conversation-messages').replaceChildren(...state.thread.messages.map(conversationMessageNode));
+}
+function conversationMessageNode(message) {
+  const article = el('article', 'thread-message'); article.dataset.messageId = message.id;
+  const meta = el('div', 'reader-meta');
+  const toggle = el('button', 'thread-toggle'); toggle.type = 'button';
+  toggle.setAttribute('aria-label', `Recolher mensagem de ${message.fromName}`);
+  const sender = el('span', 'reader-sender');
+  sender.append(el('strong', '', message.from === state.user.email ? `${message.fromName} (você)` : message.fromName), el('span', 'muted thread-email', ` <${message.from}>`));
+  const preview = el('span', 'thread-preview muted', message.preview);
+  const time = el('time', '', dateTime(message.timestamp)); time.dateTime = new Date(message.timestamp).toISOString();
+  toggle.append(icon('imgAvatar.svg', 40), sender, preview, time);
+  const star = el('button', `icon-button${message.starred ? ' starred' : ''}`); star.append(icon('imgEmailRowStar.svg'));
+  star.setAttribute('aria-label', `Alternar estrela da mensagem de ${message.fromName}`); star.setAttribute('aria-pressed', String(message.starred));
+  star.addEventListener('click', () => perform(() => mutate(message.id, 'star', { starred: !message.starred })));
+  const reply = el('button', 'icon-button'); reply.append(icon('imgIconReply1.svg'));
+  reply.setAttribute('aria-label', `Responder à mensagem de ${message.fromName}`);
+  reply.addEventListener('click', () => openCompose(replyMessage(message, state.user.email)));
+  meta.append(toggle, star, reply);
+  const content = el('div', 'reader-content thread-content');
+  const details = el('details', 'thread-addresses'); const summary = el('summary', '', `para ${message.to.includes(state.user.email) ? 'mim' : message.to.join(', ') || 'destinatário oculto'}`);
+  const addresses = el('dl');
+  for (const [label, value] of [['De', `${message.fromName} <${message.from}>`], ['Para', message.to.join(', ') || '—'], ['Cc', message.cc.join(', ') || '—'], ['Data', dateTime(message.timestamp)]]) addresses.append(el('dt', '', label), el('dd', '', value));
+  details.append(summary, addresses); content.append(details);
+  if (message.receivedAsBcc) content.append(el('p', 'bcc-notice', 'Você recebeu esta mensagem como CCO.'));
+  if (message.trash) content.append(el('span', 'badge', 'Lixeira'));
+  content.append(el('div', 'message-body', message.body), attachmentNodes(message));
+  function collapse() {
+    const collapsed = state.collapsed.has(message.id); content.hidden = collapsed; article.classList.toggle('collapsed', collapsed);
+    toggle.setAttribute('aria-expanded', String(!collapsed)); toggle.setAttribute('aria-label', `${collapsed ? 'Expandir' : 'Recolher'} mensagem de ${message.fromName}`);
+  }
+  toggle.addEventListener('click', () => { if (state.collapsed.has(message.id)) state.collapsed.delete(message.id); else state.collapsed.add(message.id); collapse(); });
+  article.append(meta, content); collapse(); return article;
+}
+function attachmentNodes(message) {
+  const container = el('div', 'attachment-list');
+  container.append(...message.attachments.map(file => {
     const button = el('button', 'attachment-download'); const label = el('span', '', file.name);
     label.append(el('small', '', `${(file.size / 1024).toFixed(0)} KB · Baixar`)); button.append(icon('imgIconAttachFileStateInitial.svg', 24), label);
     button.addEventListener('click', () => perform(async () => {
@@ -203,13 +239,16 @@ function renderMessage() {
         document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 10000);
       } finally { button.disabled = false; }
     })); return button;
-  }));
+  })); return container;
 }
-async function mutate(id, action, body = {}) {
-  const data = await api(`/messages/${id}/${action}`, { method: 'PATCH', body });
-  if (state.message?.id === id) { state.message = data; renderMessage(); }
-  if (isInFolder(data, state.folder)) state.rows.set(id, data); else state.rows.delete(id);
-  renderList(); polling?.trigger('messages'); return data;
+async function mutate(id, action, body = {}, wholeThread = false) {
+  const data = await api(`/messages/${id}/${wholeThread ? 'thread/' : ''}${action}`, { method: 'PATCH', body });
+  if (state.thread && (wholeThread ? state.thread.id === data.id : state.thread.messages.some(message => message.id === id))) {
+    if (wholeThread) setConversation(data);
+    else setConversation({ ...state.thread, messages: state.thread.messages.map(message => message.id === id ? data : message) });
+    renderMessage();
+  }
+  await loadFolder(); polling?.trigger('messages'); return data;
 }
 async function readerAction(action) {
   const message = state.message;
@@ -218,19 +257,19 @@ async function readerAction(action) {
   if (!message) return;
   if (action === 'reply' || action === 'reply-all') { openCompose(replyMessage(message, state.user.email, action === 'reply-all')); return; }
   if (action === 'forward') { openCompose(forwardMessage(message)); return; }
-  if (action === 'star') { await mutate(message.id, 'star', { starred: !message.starred }); return; }
+  if (action === 'star') { await mutate(message.id, 'star', { starred: !state.thread.messages.some(item => item.starred) }, true); return; }
   if (action === 'print') { window.print(); return; }
   if (action === 'expand') { document.body.classList.toggle('reading-expanded'); return; }
   if (action === 'more') { showMessageActions(); return; }
   if (action === 'delete') {
-    if (!window.confirm('Excluir definitivamente sua cópia desta mensagem?')) return;
-    await api(`/messages/${message.id}`, { method: 'DELETE' }); state.rows.delete(message.id); showList(); renderList(); polling.trigger('messages'); toast('Mensagem excluída'); return;
+    if (!window.confirm('Excluir definitivamente suas cópias de todas as mensagens desta conversa?')) return;
+    await api(`/messages/${message.id}/thread`, { method: 'DELETE' }); showList(); await loadFolder(); polling.trigger('messages'); toast('Conversa excluída'); return;
   }
   if (action === 'trash' || action === 'restore') {
-    await mutate(message.id, action); showList(); toast(action === 'trash' ? 'Mensagem movida para a lixeira' : 'Mensagem restaurada');
-  } else if (action === 'unread') { await mutate(message.id, 'read', { read: false }); showList(); }
+    await mutate(message.id, action, {}, true); showList(); toast(action === 'trash' ? 'Conversa movida para a lixeira' : 'Conversa restaurada');
+  } else if (action === 'unread') { await mutate(message.id, 'read', { read: false }, true); showList(); }
   else if (['archive', 'spam', 'snoozed', 'inbox'].includes(action)) {
-    await mutate(message.id, 'location', { location: action }); showList(); toast(action === 'snoozed' ? 'Mensagem adiada por uma hora' : 'Mensagem movida');
+    await mutate(message.id, 'location', { location: action }, true); showList(); toast(action === 'snoozed' ? 'Conversa adiada por uma hora' : 'Conversa movida');
   }
 }
 function perform(action) { return Promise.resolve().then(action).catch(error => { if (!state.expired) toast('Não foi possível concluir', error.message, { error: true }); }); }
@@ -240,7 +279,7 @@ function draftValue() {
   return { id: base.id, sendKey: base.sendKey, to: parseRecipients($('#compose-to').value), cc: parseRecipients($('#compose-cc').value),
     bcc: parseRecipients($('#compose-bcc').value), subject: $('#compose-subject').value, body: $('#compose-body').value,
     savedFileNames: [...state.missingFiles, ...state.files.map(file => file.name)],
-    forwardMessageId: base.forwardMessageId, forwardedAttachments: state.forwarded };
+    inReplyTo: base.inReplyTo, forwardMessageId: base.forwardMessageId, forwardedAttachments: state.forwarded };
 }
 function hasDraftContent(value) { return value.subject || value.body || value.to.length || value.cc.length || value.bcc.length || value.savedFileNames.length || value.forwardedAttachments.length; }
 function persistDraft() {
@@ -261,7 +300,7 @@ function openCompose(value = {}) {
   $('#compose-subject').value = value.subject || ''; $('#compose-body').value = value.body || '';
   $('#compose-error').hidden = true; $('#draft-status').textContent = state.missingFiles.length ? 'Selecione novamente os anexos do rascunho.' : '';
   $('#composer').hidden = false; $('#composer').classList.remove('minimized'); $('#file-input').value = '';
-  $('#compose-body').maxLength = state.config.maxMessageLength; $('#composer-title').textContent = 'Nova mensagem';
+  $('#compose-body').maxLength = state.config.maxMessageLength; $('#composer-title').textContent = value.inReplyTo ? 'Responder à conversa' : 'Nova mensagem';
   renderComposeFiles(); hideSuggestions(); $('#compose-to').focus();
 }
 function closeCompose({ discard = false } = {}) {
@@ -311,12 +350,14 @@ $('#compose-form').addEventListener('submit', async event => {
   controls.forEach(control => control.disabled = true); $('#send-button').firstChild.textContent = 'Enviando';
   const form = new FormData();
   form.set('message', JSON.stringify({ to: draft.to, cc: draft.cc, bcc: draft.bcc, subject: draft.subject, body: draft.body,
-    forwardMessageId: draft.forwardMessageId, forwardedAttachmentIds: state.forwarded.map(file => file.id) }));
+    inReplyTo: draft.inReplyTo, forwardMessageId: draft.forwardMessageId, forwardedAttachmentIds: state.forwarded.map(file => file.id) }));
   state.files.forEach(file => form.append('attachments', file));
   try {
-    await api('/messages', { method: 'POST', body: form, headers: { 'Idempotency-Key': draft.sendKey }, timeout: 30000 });
+    const sent = await api('/messages', { method: 'POST', body: form, headers: { 'Idempotency-Key': draft.sendKey }, timeout: 30000 });
     sending = false; controls.forEach(control => control.disabled = false); closeCompose({ discard: true });
-    toast('Mensagem enviada'); polling.trigger('messages'); if (state.folder === 'sent') await loadFolder({ reset: true });
+    toast('Mensagem enviada'); polling.trigger('messages');
+    if (draft.inReplyTo && state.thread?.id === sent.threadId) await openMessage(sent.id);
+    else if (state.folder === 'sent') await loadFolder({ reset: true });
   } catch (error) { errorNode.textContent = error.message; errorNode.hidden = false; }
   finally { sending = false; controls.forEach(control => control.disabled = false); $('#send-button').firstChild.textContent = 'Enviar'; }
 });
@@ -504,7 +545,7 @@ $('#bulk-trash').addEventListener('click', () => perform(async () => {
   if (removingDrafts && !window.confirm('Descartar os rascunhos selecionados?')) return;
   $('#bulk-trash').disabled = true;
   const ids = [...state.selected];
-  for (const id of ids) { if (removingDrafts) drafts.remove(id); else await mutate(id, 'trash'); }
+  for (const id of ids) { if (removingDrafts) drafts.remove(id); else await api(`/messages/${state.rows.get(id).id}/thread/trash`, { method: 'PATCH', body: {} }); }
   state.selected.clear(); await loadFolder(); toast(removingDrafts ? 'Rascunhos descartados' : 'Seleção movida para a lixeira');
 }));
 $('#search-form').addEventListener('submit', event => { event.preventDefault(); clearTimeout(searchTimer); state.query = $('#search-input').value.trim(); showList(); perform(() => loadFolder({ reset: true })); });

@@ -1,0 +1,25 @@
+.thread-count{font-size:12px;font-weight:400;color:var(--muted)}
+.reader-count{color:var(--muted);font-size:12px;white-space:nowrap}
+.thread-message{border-bottom:1px solid var(--border);padding-top:12px}
+.thread-message .reader-meta{align-items:center}
+.thread-toggle{display:flex;align-items:center;gap:12px;flex:1;min-width:0;text-align:left;padding:4px 0}
+.thread-toggle>img{flex:none}
+.thread-toggle .reader-sender{flex:1;overflow:hidden}
+.thread-email{font-size:12px;overflow-wrap:anywhere}
+.thread-toggle time{padding:0;flex:none}
+.thread-preview{display:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;flex:1;min-width:0}
+.thread-message.collapsed .thread-preview{display:block}
+.thread-message.collapsed .reader-sender{flex:0 1 210px}
+.thread-message.collapsed{background:#f8f9fa;padding-bottom:12px}
+.thread-message .icon-button.starred{background:#fef7e0}
+.thread-content{gap:16px;padding-top:0;padding-bottom:28px}
+.thread-content .message-body{min-height:0}
+.thread-addresses{font-size:12px;color:var(--muted);max-width:100%;overflow-wrap:anywhere}
+.thread-addresses summary{cursor:pointer}
+.thread-addresses dl{padding:12px;background:#f8f9fa;border:1px solid var(--border);border-radius:4px;margin-top:8px}
+.thread-addresses dt{font-weight:500;margin-top:6px}
+.thread-addresses dd{margin:3px 0 8px}
+.thread-footer .smart-replies{margin-top:0}
+@media(max-width:800px){.thread-email{display:block}.thread-toggle{flex-wrap:wrap}.thread-toggle time{font-size:10px}.thread-message.collapsed .thread-preview{display:none}.thread-message.collapsed .reader-sender{flex:1}}
+@media(max-width:600px){.thread-toggle{gap:8px}.thread-toggle time{width:100%;padding-left:48px}.thread-message .reader-meta{flex-wrap:nowrap;gap:4px}.thread-email{font-size:11px}.thread-content{padding-top:0}.reader-count{font-size:11px}}
+@media print{.thread-content[hidden]{display:flex!important}.thread-message .reader-meta>.icon-button,.thread-preview{display:none!important}.thread-message{break-inside:avoid}.thread-toggle time{display:block}}
