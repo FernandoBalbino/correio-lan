@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Correio LAN — Caixa de entrada</title>
+  <link rel="icon" href="/assets/figma/imgSideNavGmailNew.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/correio-lan.css">
+  <script type="module" src="/js/app.js"></script>
+</head>
+<body class="mail-page">
+  <a class="skip-link" href="#mail-main">Ir para as mensagens</a>
+  <header class="mail-header">
+    <div class="header-brand">
+      <button id="menu-button" class="icon-button" aria-label="Mostrar ou ocultar navegação" aria-controls="sidebar" aria-expanded="true"><img src="/assets/figma/imgIconMenu.svg" width="24" height="24" alt=""></button>
+      <div class="brand"><img src="/assets/figma/imgLogo.png" width="109" height="40" alt="Gmail — referência visual"><span>CORREIO LAN</span></div>
+    </div>
+    <form class="search-bar" id="search-form" role="search">
+      <img src="/assets/figma/imgHoverNo.svg" width="24" height="24" alt="">
+      <input id="search-input" type="search" maxlength="100" placeholder="Pesquisar e-mails" aria-label="Pesquisar e-mails na pasta atual">
+      <button class="icon-button" aria-label="Pesquisar" type="submit"><img src="/assets/figma/imgArrow2.svg" width="22" height="22" alt=""></button>
+    </form>
+    <div class="header-actions">
+      <span id="room-label" class="room-label">Sala</span>
+      <button class="icon-button" id="help-button" aria-label="Ajuda"><img src="/assets/figma/imgIconHelpOutline.svg" width="24" height="24" alt=""></button>
+      <button class="icon-button" id="settings-button" aria-label="Configurações"><img src="/assets/figma/imgIconSettings.svg" width="24" height="24" alt=""></button>
+      <button class="icon-button" id="activity-button" aria-label="Atividade da sala"><img src="/assets/figma/imgIconApps.svg" width="24" height="24" alt=""></button>
+      <button class="profile-button" id="profile-button" aria-label="Minha sessão">
+        <span class="profile-art" aria-hidden="true"><img class="profile-bottom" src="/assets/figma/imgEllipse4.svg" alt=""><img class="profile-left" src="/assets/figma/imgEllipse5.svg" alt=""><img class="profile-top" src="/assets/figma/imgEllipse6.svg" alt=""><img class="profile-right" src="/assets/figma/imgEllipse7.svg" alt=""><img class="profile-photo" src="/assets/figma/imgEllipse2.png" width="32" height="32" alt=""></span>
+      </button>
+    </div>
+  </header>
+  <aside class="sidebar" id="sidebar" aria-label="Navegação e participantes">
+    <button id="compose-button" class="compose-button"><img src="/assets/figma/imgSideNavGmailNew.svg" width="24" height="24" alt="">Escrever</button>
+    <nav class="folder-nav" aria-label="Pastas de e-mail">
+      <button class="folder active" data-folder="inbox" aria-current="page"><img src="/assets/figma/imgSideNavIcons.svg" width="22" height="22" alt=""><span>Caixa de entrada</span><b data-count="unread"></b></button>
+      <button class="folder" data-folder="starred"><img src="/assets/figma/imgSideNavIcons1.svg" width="22" height="22" alt=""><span>Com estrela</span><b data-count="starred"></b></button>
+      <button class="folder" data-folder="snoozed"><img src="/assets/figma/imgSideNavIcons2.svg" width="22" height="22" alt=""><span>Adiados</span><b data-count="snoozed"></b></button>
+      <button class="folder" data-folder="sent"><img src="/assets/figma/imgSideNavIcons3.svg" width="22" height="22" alt=""><span>Enviados</span><b data-count="sent"></b></button>
+      <button class="folder" data-folder="drafts"><img src="/assets/figma/imgSideNavIcons4.svg" width="22" height="22" alt=""><span>Rascunhos</span><b data-count="drafts"></b></button>
+      <button class="folder" data-folder="spam"><img src="/assets/figma/imgSideNavIcons5.svg" width="22" height="22" alt=""><span>Spam</span><b data-count="spam"></b></button>
+      <button class="folder" data-folder="trash"><img src="/assets/figma/imgSideNavIcons6.svg" width="22" height="22" alt=""><span>Lixeira</span><b data-count="trash"></b></button>
+      <button class="folder" data-folder="archive"><img src="/assets/figma/imgIconArchiveProperty2Initial.svg" width="22" height="22" alt=""><span>Arquivados</span><b data-count="archive"></b></button>
+    </nav>
+    <section class="people-section"><div class="section-heading"><h2>Pessoas na sala</h2><span id="online-count">0 online</span></div><div id="people-list"></div></section>
+    <section id="activity-summary" class="sidebar-activity"><h2>Atividade da sala</h2><p class="muted">Nenhuma atividade publicada.</p></section>
+    <div class="sidebar-footer"><span id="connection-status" role="status"><i class="status-dot"></i> Conectando…</span><button id="leave-button" class="text-button">Sair da sala</button></div>
+  </aside>
+  <main id="mail-main" class="mail-main" tabindex="-1">
+    <div id="loading" class="loading-panel" role="status"><span class="skeleton"></span><span class="skeleton"></span><span class="skeleton"></span><p>Conectando à sua sala…</p></div>
+    <section id="mail-list-view" aria-label="Lista de mensagens" hidden>
+      <div class="mail-toolbar"><div class="toolbar-left"><input id="select-all" type="checkbox" aria-label="Selecionar todas as mensagens desta página"><button id="refresh-button" class="icon-button" aria-label="Atualizar mensagens">↻</button><button id="bulk-trash" class="icon-button" aria-label="Mover selecionadas para a lixeira" disabled><img src="/assets/figma/imgPageTrash.svg" width="22" height="22" alt=""></button></div><div class="pagination"><span id="pagination-label"></span><button id="previous-page" class="icon-button" aria-label="Página anterior"><img src="/assets/figma/imgLineArrow1.svg" width="22" height="22" alt=""></button><button id="next-page" class="icon-button" aria-label="Próxima página"><img src="/assets/figma/imgLineArrow.svg" width="22" height="22" alt=""></button></div></div>
+      <div class="list-heading"><h1 id="folder-title">Caixa de entrada</h1><span id="list-caption">Sua turma, a uma mensagem de distância.</span></div>
+      <div id="message-list"></div>
+    </section>
+    <section id="reader" class="reader" aria-label="Mensagem aberta" hidden>
+      <div class="mail-toolbar"><div class="toolbar-left reader-tools">
+        <button class="icon-button" data-reader-action="back" aria-label="Voltar para a lista"><img src="/assets/figma/imgIconArrowBackInitial.svg" width="22" height="22" alt=""></button><span class="toolbar-gap"></span>
+        <button class="icon-button" data-reader-action="archive" aria-label="Arquivar"><img src="/assets/figma/imgIconArchiveProperty2Initial.svg" width="22" height="22" alt=""></button>
+        <button class="icon-button" data-reader-action="spam" aria-label="Mover para spam"><img src="/assets/figma/imgPageSpam.svg" width="22" height="22" alt=""></button>
+        <button class="icon-button" data-reader-action="trash" aria-label="Mover para lixeira"><img src="/assets/figma/imgPageTrash.svg" width="22" height="22" alt=""></button><span class="toolbar-divider"></span>
+        <button class="icon-button" data-reader-action="unread" aria-label="Marcar como não lida"><img src="/assets/figma/imgIconMarkUnreadProperty2Initial.svg" width="22" height="22" alt=""></button>
+        <button class="icon-button" data-reader-action="snoozed" aria-label="Adiar por uma hora"><img src="/assets/figma/imgIconSnoozeProperty2Initial.svg" width="22" height="22" alt=""></button>
+        <button class="icon-button" data-reader-action="activity" aria-label="Ver atividade"><img src="/assets/figma/imgIconAddToTask.svg" width="22" height="22" alt=""></button><span class="toolbar-divider"></span>
+        <button class="icon-button" data-reader-action="inbox" aria-label="Mover para caixa de entrada"><img src="/assets/figma/imgIconMoveTo.svg" width="22" height="22" alt=""></button>
+        <button class="icon-button" data-reader-action="star" aria-label="Alternar estrela"><img src="/assets/figma/imgPageLabel.svg" width="22" height="22" alt=""></button>
+        <button class="icon-button" data-reader-action="more" aria-label="Mais ações"><img src="/assets/figma/imgMore.svg" width="22" height="32" alt=""></button>
+      </div></div>
+      <div class="reader-subject"><h1 id="reader-subject"></h1><img src="/assets/figma/imgEmailRowLabelImportant.svg" width="22" height="22" alt=""><span class="badge" id="reader-folder">Entrada</span><div class="reader-subject-actions"><button class="icon-button" data-reader-action="print" aria-label="Imprimir mensagem"><img src="/assets/figma/imgIconPrint.svg" width="20" height="20" alt=""></button><button class="icon-button" data-reader-action="expand" aria-label="Ampliar leitura"><img src="/assets/figma/imgIconOpenInNew.svg" width="20" height="20" alt=""></button></div></div>
+      <div class="reader-meta"><img src="/assets/figma/imgAvatar.svg" width="40" height="40" alt=""><div class="reader-sender"><div><strong id="reader-name"></strong> <span id="reader-email" class="muted"></span></div><details><summary>para <span id="reader-to-short"></span><img src="/assets/figma/imgArrow1.svg" width="16" height="16" alt=""></summary><dl id="reader-addresses"></dl></details></div><time id="reader-date"></time><button id="reader-star" class="icon-button" data-reader-action="star" aria-label="Alternar estrela"><img src="/assets/figma/imgEmailRowStar.svg" width="22" height="22" alt=""></button><button class="icon-button" data-reader-action="reply" aria-label="Responder"><img src="/assets/figma/imgIconReply1.svg" width="22" height="22" alt=""></button></div>
+      <div class="reader-content"><p id="bcc-notice" class="bcc-notice" hidden>Você recebeu esta mensagem como CCO.</p><div id="reader-body" class="message-body"></div><div id="reader-attachments" class="attachment-list"></div><div class="smart-replies"><button data-smart-reply="Recebi sua mensagem. Obrigado!">Recebi, obrigado!</button><button data-smart-reply="Obrigado pelo envio. Vou conferir sua atividade.">Vou conferir.</button><button data-smart-reply="Podemos conversar sobre esta atividade?">Vamos conversar?</button></div><hr><div class="reply-actions"><button data-reader-action="reply"><img src="/assets/figma/imgIconReply.svg" width="20" height="20" alt="">Responder</button><button data-reader-action="reply-all">Responder a todos</button><button data-reader-action="forward"><img src="/assets/figma/imgIconForward.svg" width="20" height="20" alt="">Encaminhar</button><button data-reader-action="restore" id="restore-button" hidden>Restaurar</button><button data-reader-action="delete" id="delete-button" class="danger-text" hidden>Excluir definitivamente</button></div></div>
+    </section>
+  </main>
+  <aside class="right-rail" aria-label="Ferramentas da sala"><button class="icon-button" data-panel="activity" aria-label="Atividade da sala"><img src="/assets/figma/imgImage11.png" width="20" height="20" alt=""></button><button class="icon-button" data-panel="drafts" aria-label="Rascunhos"><img src="/assets/figma/imgImage12.png" width="20" height="20" alt=""></button><button class="icon-button" data-panel="teacher" aria-label="Painel de entregas"><img src="/assets/figma/imgImage13.png" width="20" height="20" alt=""></button><button class="icon-button" data-panel="people" aria-label="Pessoas na sala"><img src="/assets/figma/imgImage14.png" width="20" height="20" alt=""></button><hr><button class="icon-button" data-panel="compose" aria-label="Escrever mensagem"><img src="/assets/figma/imgImage15.png" width="20" height="20" alt=""></button></aside>
+  <section id="composer" class="composer" role="dialog" aria-labelledby="composer-title" hidden>
+    <div class="composer-header"><h2 id="composer-title">Nova mensagem</h2><div><button class="icon-button" id="minimize-compose" aria-label="Minimizar compositor"><img src="/assets/figma/imgIconMinimizeInitial.svg" width="16" height="16" alt=""></button><button class="icon-button" id="expand-compose" aria-label="Ampliar compositor"><img src="/assets/figma/imgIconOpenInInitial.svg" width="16" height="16" alt=""></button><button class="icon-button" id="close-compose" aria-label="Salvar rascunho e fechar"><img src="/assets/figma/imgCloseWhite.svg" width="10" height="10" alt=""></button></div></div>
+    <form id="compose-form" class="compose-form">
+      <div class="recipient-line"><label for="compose-to">Para</label><input id="compose-to" data-recipients="to" autocomplete="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="suggestions-to"><button type="button" id="toggle-cc" class="text-button">Cc</button><button type="button" id="toggle-bcc" class="text-button">Cco</button><div id="suggestions-to" class="suggestions" role="listbox" hidden></div></div>
+      <div class="recipient-line" id="cc-line" hidden><label for="compose-cc">Cc</label><input id="compose-cc" data-recipients="cc" autocomplete="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="suggestions-cc"><div id="suggestions-cc" class="suggestions" role="listbox" hidden></div></div>
+      <div class="recipient-line" id="bcc-line" hidden><label for="compose-bcc">Cco</label><input id="compose-bcc" data-recipients="bcc" autocomplete="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="suggestions-bcc"><div id="suggestions-bcc" class="suggestions" role="listbox" hidden></div></div>
+      <label class="subject-line"><span class="sr-only">Assunto</span><input id="compose-subject" maxlength="100" placeholder="Assunto" required></label>
+      <label class="body-field"><span class="sr-only">Mensagem</span><textarea id="compose-body" maxlength="10000" placeholder="Escreva sua mensagem…"></textarea></label>
+      <div id="compose-attachments" class="compose-attachments"></div><p id="compose-error" class="form-error" role="alert" hidden></p><p id="draft-status" class="draft-status" role="status"></p>
+      <input id="file-input" type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.txt,.docx" hidden>
+      <div class="compose-footer"><button type="submit" id="send-button" class="primary send-button">Enviar<img src="/assets/figma/imgArrow.svg" width="16" height="16" alt=""></button><button type="button" class="icon-button" id="format-button" aria-label="Informações sobre o texto"><img src="/assets/figma/imgDraftToolbarIcons.svg" width="28" height="28" alt=""></button><button type="button" class="icon-button" id="attach-button" aria-label="Selecionar anexos"><img src="/assets/figma/imgIconAttachFileStateInitial.svg" width="24" height="24" alt=""></button><button type="button" class="icon-button" id="link-button" aria-label="Inserir link como texto"><img src="/assets/figma/imgIconLinkStateInitial.svg" width="24" height="24" alt=""></button><button type="button" class="icon-button" id="emoji-button" aria-label="Inserir emoji"><img src="/assets/figma/imgIconEmojiStateInitial.svg" width="24" height="24" alt=""></button><button type="button" class="icon-button" id="document-button" aria-label="Anexar documento"><img src="/assets/figma/imgIconAddToDriveStateInitial.svg" width="24" height="24" alt=""></button><button type="button" class="icon-button" id="image-button" aria-label="Anexar imagem"><img src="/assets/figma/imgIconImageStateInitial.svg" width="24" height="24" alt=""></button><button type="button" class="icon-button" id="save-draft" aria-label="Salvar rascunho"><img src="/assets/figma/imgIconLockClockStateInitial.svg" width="24" height="24" alt=""></button><button type="button" class="icon-button" id="signature-button" aria-label="Adicionar assinatura"><img src="/assets/figma/imgIconPenStateInitial.svg" width="24" height="24" alt=""></button><span class="flex-space"></span><button type="button" class="text-button" id="cancel-compose">Cancelar</button><button type="button" class="icon-button" id="discard-compose" aria-label="Descartar rascunho"><img src="/assets/figma/imgIconDeleteStateInitial.svg" width="24" height="24" alt=""></button></div>
+    </form>
+  </section>
+  <dialog id="utility-dialog" class="utility-dialog"><div class="dialog-heading"><h2 id="dialog-title"></h2><button class="icon-button" id="close-dialog" aria-label="Fechar">×</button></div><div id="dialog-content"></div></dialog>
+  <div id="toasts" class="toasts" aria-live="polite" aria-atomic="false"></div>
+</body>
+</html>

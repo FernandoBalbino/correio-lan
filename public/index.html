@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Correio LAN — Entrar na sala</title>
+  <meta name="description" content="Aprenda a trocar e-mails em uma sala virtual com sua turma.">
+  <link rel="icon" href="/assets/figma/imgSideNavGmailNew.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/correio-lan.css">
+  <script type="module" src="/js/login.js"></script>
+</head>
+<body class="login-page">
+  <main class="login-card">
+    <img class="reference-logo" src="/assets/figma/imgLogo.png" width="109" height="40" alt="Gmail — referência visual">
+    <p class="eyebrow">CORREIO LAN</p>
+    <h1>Entre na sua sala</h1>
+    <p class="muted">Simulador de comunicação por e-mail.<br>Um espaço para aprender com sua turma.</p>
+    <form id="login-form">
+      <fieldset class="role-choice"><legend>Como você vai participar?</legend>
+        <label><input type="radio" name="role" value="student" checked> Aluno</label>
+        <label><input type="radio" name="role" value="teacher"> Professor</label>
+      </fieldset>
+      <label class="field">Nome<input name="name" maxlength="50" required autocomplete="name" placeholder="Fernando Silva"></label>
+      <label class="field">Identificador<input name="username" maxlength="30" required autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="fernando"><small>Letras sem acento, números, ponto, hífen ou sublinhado.</small></label>
+      <label class="field">Sala<input name="room" maxlength="30" required autocomplete="off" placeholder="2ANO-INFO"></label>
+      <div class="email-preview"><span>Seu endereço</span><strong id="email-preview">identificador@sala.local</strong></div>
+      <p id="login-error" class="form-error" role="alert" hidden></p>
+      <button class="primary login-submit" type="submit">Entrar na sala</button>
+    </form>
+    <div class="temporary-note">As salas são temporárias. Mensagens e atividades são apagadas quando o servidor reinicia.</div>
+    <footer>Correio LAN · Simulação educacional</footer>
+  </main>
+</body>
+</html>
